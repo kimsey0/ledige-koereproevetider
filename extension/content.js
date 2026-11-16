@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const VERSION = '0.2.0';
+  const VERSION = '0.2.1';
   const API = 'https://onlinebooking-api.prod.workforce-planner.dk/';
   const PREFS_KEY = 'ledige-tider:prefs';
   const LOG_KEY = 'ledige-tider:log';

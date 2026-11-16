@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Ledige køreprøvetider",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Viser ledige prøvetider på tværs af alle prøvesteder i MinKøreprøve.",
   "content_scripts": [
     {

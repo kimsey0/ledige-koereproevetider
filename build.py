@@ -32,6 +32,8 @@ firefox = {
         "gecko": {
             "id": "ledige-koereproevetider@kimsey0.github.io",
             "strict_min_version": "115.0",
+            # Firefox checks this file for newer signed versions (self-hosted updates).
+            "update_url": "https://raw.githubusercontent.com/kimsey0/ledige-koereproevetider/main/updates.json",
             "data_collection_permissions": {"required": ["none"]},
         }
     },
@@ -50,3 +52,9 @@ with zipfile.ZipFile(xpi, "w", zipfile.ZIP_DEFLATED) as z:
     for f in sorted(out.iterdir()):
         z.write(f, f.name)
 print(xpi)
+
+# Firefox only offers versions listed in updates.json, so flag a forgotten entry.
+gecko = firefox["browser_specific_settings"]["gecko"]
+listed = [u["version"] for u in json.loads((root / "updates.json").read_text(encoding="utf-8"))["addons"][gecko["id"]]["updates"]]
+if version not in listed:
+    print(f"WARNING: updates.json has no entry for {version}")

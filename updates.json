@@ -1,0 +1,12 @@
+{
+  "addons": {
+    "ledige-koereproevetider@kimsey0.github.io": {
+      "updates": [
+        {
+          "version": "0.2.1",
+          "update_link": "https://github.com/kimsey0/ledige-koereproevetider/releases/download/v0.2.1/ledige-tider-firefox-0.2.1-signed.xpi"
+        }
+      ]
+    }
+  }
+}

@@ -72,8 +72,31 @@ cd demo && npm install
 node smoke.mjs           # offline test against a stubbed site and API
 ```
 
+## Releasing a Firefox version
+
+Signed versions update themselves: the add-on's manifest points at
+`updates.json` in this repository, and Firefox installs any newer version
+listed there.
+
+1. Set the new version in `extension/manifest.json` and in `VERSION` in
+   `extension/content.js`.
+2. Add an entry for it to `updates.json`, with the link the signed file will
+   have: `…/releases/download/v<version>/ledige-tider-firefox-<version>-signed.xpi`.
+3. Run `python build.py`, commit, push, and create the GitHub release
+   `v<version>` with the unsigned `.xpi`.
+4. Submit that `.xpi` at addons.mozilla.org's Developer Hub as an "On your
+   own" (self-distributed) version.
+5. Download the signed file and add it to the same GitHub release under the
+   name from step 2:
+   `gh release upload v<version> ledige-tider-firefox-<version>-signed.xpi`
+
+Until step 5 is done, Firefox finds the entry but cannot download the file;
+it simply tries again later. Give the signed file to new users; the unsigned
+one only loads through `about:debugging`.
+
 ## Status
 
-Prototype, version 0.2.0. Tested as an installed extension in Chromium with
-one citizen login. Not yet tested in Firefox, and not yet in a driving
-instructor's session.
+Prototype, version 0.2.1. Tested as an installed extension in Chromium and
+as a temporary add-on in Firefox (0.2.0) with one citizen login. Not yet
+tested in a driving instructor's session, and self-updating has not been
+exercised yet.
