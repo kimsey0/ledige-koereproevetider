@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Ledige køreprøvetider",
+  "version": "0.2.0",
+  "description": "Viser ledige prøvetider på tværs af alle prøvesteder i MinKøreprøve.",
+  "content_scripts": [
+    {
+      "matches": ["https://onlinebooking.prod.workforce-planner.dk/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
