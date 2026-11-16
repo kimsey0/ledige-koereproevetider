@@ -15,26 +15,26 @@ availability, one request at a time, and never books anything.
 - `demo/` holds an offline smoke test and the scripts that recorded the demo
   video.
 
-## Install in Firefox (temporary, for testing)
+## Install in Firefox
 
-1. Download `ledige-tider-firefox-<version>.xpi` from the
-   [latest release](../../releases/latest).
-2. Open `about:debugging#/runtime/this-firefox` in Firefox.
-3. Click "Load Temporary Add-on…" ("Indlæs midlertidig tilføjelse…") and pick
-   the downloaded file.
-4. Go to https://www.minkøreprøve.dk, click through to booking and log in
+1. In Firefox, open the file ending in `-signed.xpi` from the
+   [latest release](../../releases/latest) and accept the install prompt.
+2. Go to https://www.minkøreprøve.dk, click through to booking and log in
    with MitID.
-5. Click "Ledige tider på tværs af prøvesteder" in the bottom right corner.
+3. Click "Ledige tider på tværs af prøvesteder" in the bottom right corner.
 
-A temporary add-on disappears when Firefox is closed; repeat steps 2 and 3
-after a restart. A permanent install needs the file signed by Mozilla, which
-is a later step.
+The signed file is signed by Mozilla as a self-distributed add-on, so it
+stays installed and updates itself when a newer version is released here. It
+is not listed on addons.mozilla.org.
 
 ## Install in Chrome, Edge or Brave
 
-1. Open `chrome://extensions` and switch on developer mode.
-2. Choose "Load unpacked" and pick the `extension` folder.
-3. Continue from step 4 above.
+1. Download this repository and open `chrome://extensions`.
+2. Switch on developer mode, choose "Load unpacked" and pick the `extension`
+   folder.
+3. Continue from step 2 above.
+
+There are no automatic updates this way.
 
 ## If something does not work
 
@@ -72,6 +72,11 @@ cd demo && npm install
 node smoke.mjs           # offline test against a stubbed site and API
 ```
 
+To try an unsigned build in Firefox, open
+`about:debugging#/runtime/this-firefox`, click "Load Temporary Add-on…" and
+pick the `.xpi` from `dist/`. A temporary add-on disappears when Firefox is
+closed.
+
 ## Releasing a Firefox version
 
 Signed versions update themselves: the add-on's manifest points at
@@ -96,7 +101,11 @@ one only loads through `about:debugging`.
 
 ## Status
 
-Prototype, version 0.2.1. Tested as an installed extension in Chromium and
-as a temporary add-on in Firefox (0.2.0) with one citizen login. Not yet
-tested in a driving instructor's session, and self-updating has not been
-exercised yet.
+Prototype, version 0.2.1, signed for Firefox.
+
+- Works with one citizen login in Chromium (installed extension) and in
+  Firefox (0.2.0 as a temporary add-on).
+- Not yet tested in a driving instructor's session, where he books on behalf
+  of students.
+- Self-updating has not been exercised; the first newer version will be the
+  test.
