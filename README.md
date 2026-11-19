@@ -102,13 +102,12 @@ one only loads through `about:debugging`.
 
 ## Status
 
-Prototype, version 0.2.2.
+Prototype, version 0.2.3.
 
 - Works with one citizen login in Chromium (installed extension) and in
   Firefox (0.2.0 as a temporary add-on).
 - 0.2.1 did not work for a driving instructor: it found no exams for the
   selected student. 0.2.2 adds support for booking on behalf of a student,
   built from his debug log and checked offline only. It still needs a run in
-  his session.
-- Self-updating from 0.2.1 to 0.2.2 will be the first test of the update
-  mechanism.
+  his session. 0.2.3 only improves the debug log.
+- Self-updating from 0.2.1 will be the first test of the update mechanism.

@@ -1,10 +1,10 @@
 (() => {
   'use strict';
-  const VERSION = '0.2.2';
+  const VERSION = '0.2.3';
   const API = 'https://onlinebooking-api.prod.workforce-planner.dk/';
   const PREFS_KEY = 'ledige-tider:prefs';
   const LOG_KEY = 'ledige-tider:log';
-  const LOG_MAX = 600;
+  const LOG_MAX = 2000;
   const CACHE_MS = 2 * 60 * 1000;
   if (document.getElementById('ledige-tider-host')) return;
 
@@ -63,7 +63,9 @@
     try { r = await pageFetch(API + path, { headers: { Authorization: 'Bearer ' + t.accessToken } }); }
     catch (e) { log('api', { path: pathOnly(path), result: 'network error', message: e?.message, ms: Date.now() - started }); throw new Error('netværksfejl'); }
     if (!r.ok) {
-      log('api', { path: pathOnly(path), status: r.status, ms: Date.now() - started });
+      let body = '';
+      try { body = (await r.text()).slice(0, 200); } catch { /* no body */ }
+      log('api', { path: pathOnly(path), status: r.status, ms: Date.now() - started, body });
       throw new Error(r.status === 401 ? 'login' : 'HTTP ' + r.status);
     }
     const json = await r.json();
@@ -123,6 +125,7 @@
       if (state.processId) await loadOptions();
     } catch (e) { state.error = e.message; logError('loadModel', e); }
     state.loading = false; render();
+    log('view', { error: state.error, hasProcess: !!state.processId, rows: state.rows.length, professional: state.professional });
     if (!state.error) scan();
   }
 
@@ -177,7 +180,7 @@
       if (run !== state.run) return;
       state.progress.done++; render();
     }
-    if (want.length) log('scan-end', { ms: Date.now() - started, withSlots: visibleRows().filter((r) => cache.get(r.offerId)?.slots.length).length, failed: visibleRows().filter((r) => cache.get(r.offerId)?.error).length });
+    if (want.length) log('scan-end', { ms: Date.now() - started, shown: visibleRows().length, times: visibleRows().reduce((n, r) => n + (cache.get(r.offerId)?.slots.length || 0), 0), withSlots: visibleRows().filter((r) => cache.get(r.offerId)?.slots.length).length, failed: visibleRows().filter((r) => cache.get(r.offerId)?.error).length });
     state.progress = null; render();
   }
 
@@ -344,7 +347,8 @@
       area);
   }
 
-  function render() {
+  function render() { try { renderPanel(); } catch (e) { logError('render', e); } }
+  function renderPanel() {
     launch.style.display = state.open ? 'none' : '';
     if (!state.open) { mount.replaceChildren(); return; }
     let body = root.querySelector('.body'); const top = body?.scrollTop || 0;
@@ -395,6 +399,7 @@
     new PerformanceObserver((list) => {
       for (const e of list.getEntries()) {
         if (!/^https:\/\/[^/]*workforce-planner\.dk\//.test(e.name) || /\.(js|css|woff2?|svg|png|ico)(\?|$)/.test(e.name)) continue;
+        if (e.initiatorType === 'fetch' && e.name.startsWith(API)) continue;
         log('site-call', { path: pathOnly(e.name), by: e.initiatorType, status: e.responseStatus || undefined, ms: Math.round(e.duration) });
         const m = /\/process\/([0-9a-f-]{36})\/booking-options(?:\?(.*))?$/.exec(e.name);
         if (m && e.initiatorType !== 'fetch') siteProcess = { processId: m[1], personId: (/(?:^|&)impersonatedPersonId=([0-9a-f-]{36})/.exec(m[2] || '') || [])[1] || null };
