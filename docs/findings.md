@@ -160,15 +160,49 @@ connect-src 'self' https://*.workforce-planner.dk …
 - Vejle, Grønlandsvej 364: 24 Nov at 08:00, 09:00, 10:00, 11:00, 12:30, 13:30
 - Aalborg, Svendborgvej 18: 25 Nov at 09:00
 
+## The driving instructor's flow
+
+Seen in a debug log from an instructor's session on 2026-11-19 (Firefox on a
+Mac, version 0.2.1). Only paths, statuses and response structure were logged.
+
+- He lands on `/microsites/{id}/assessor-processes/list` ("Elevoverblik"),
+  which the app fills from
+  `GET processes/assessor-processes?sortBy=0&descendingSortDirection=false&…`
+  (further parameters were cut off in the log). The response was not seen.
+- `auth/user-info` gives `isMitIdProfessional: true`, `isBookOnBehalf: false`.
+  There is no "Vælg person" picker, `person/associated-persons` is empty, and
+  `processes/applicant-processes` returns `[]`. That empty list is why 0.2.1
+  told him there was nothing to book.
+- Picking a student calls `POST token` and replaces the token with one where
+  `isImpersonating` is true. The app then goes to
+  `/microsites/{id}/booking-options` (no `/process/{id}` in the route, unlike
+  the citizen flow).
+- From then on the app adds `impersonatedPersonId={personId}` to its calls:
+  `process/{processId}/booking-options`, `processes/{processId}/booking-eligibility`
+  and `appointments/unpaid`. The process ID is the student's, taken from the
+  student list. Whether the time-slot call carries the parameter too could not
+  be read from the log; the add-on sends it.
+- The process ID and person ID appear nowhere the add-on can read except in
+  the app's own request URLs, so the add-on picks them up from the browser's
+  resource timing entries.
+- Going back to the student list, or reloading the page, ends the
+  impersonation (a reload goes through the login gateway again). The add-on
+  therefore never navigates to the list, and its detour between two slot
+  pages goes via the area page instead of "Mine prøver".
+- The slot page route is the same as for citizens:
+  `/offers/{onlineOfferId}/time-slots/{date}`.
+- Different students had different offer IDs for their centers, so a sweep
+  for one student cannot be assumed to hold for another.
+
+Calls the app made when he booked an exam himself, before using the add-on
+(observed only, never made by the add-on): `GET persons/by-task-group/{id}`,
+`GET time-slots?TaskGroupId=…`, a call to `persons/by-task-group` answered
+204, `bookings` (the booking itself) and `GET bookings/{id}/receipt`.
+
 ## Not yet known
 
-- **The instructor's flow.** He logs in with MitID Erhverv and books on behalf
-  of students who granted him a power of attorney. The app has a "Vælg person"
-  picker, `associatedPersons`, `isBookOnBehalf`, `isMitIdProfessional` and an
-  `isImpersonating` flag on the token. The likely design is that picking a
-  student swaps the token for an impersonating one, in which case the
-  prototype works unchanged for whichever student is selected. This needs one
-  look at the network calls in his session.
+- **Whether 0.2.2 works for him.** The instructor support is built from the
+  log above and an offline test, not from a live session.
 - **Theory exams.** This account has passed theory, so only practical offers
   were returned. Whether a center lists theory and practical as two offers in
   one track, or as separate tracks, is unknown. The prototype handles both.

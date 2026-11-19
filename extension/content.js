@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const VERSION = '0.2.1';
+  const VERSION = '0.2.2';
   const API = 'https://onlinebooking-api.prod.workforce-planner.dk/';
   const PREFS_KEY = 'ledige-tider:prefs';
   const LOG_KEY = 'ledige-tider:log';
@@ -35,7 +35,13 @@
     if (typeof v === 'string') return /^[0-9a-f-]{36}$/.test(v) ? 'uuid' : `string(${v.length})`;
     return typeof v;
   };
-  const pathOnly = (u) => { try { const x = new URL(u, location.href); return x.pathname + (x.search ? '?' + [...x.searchParams.keys()].join('&') : ''); } catch { return String(u).slice(0, 120); } };
+  // Path plus the names (not values) of the query parameters. Done by hand:
+  // iterating URLSearchParams threw in Firefox's content script.
+  const pathOnly = (u) => {
+    const s = String(u), q = s.indexOf('?');
+    const names = q < 0 ? '' : '?' + s.slice(q + 1).split('&').map((p) => p.split('=')[0]).filter(Boolean).join('&');
+    return (q < 0 ? s : s.slice(0, q)).replace(/^https:\/\/[^/]+/, '') + names;
+  };
 
   // ---------- site access ----------
   const token = () => { try { return JSON.parse(localStorage.getItem('online-booking:auth:token')); } catch { return null; } };
@@ -78,7 +84,18 @@
   const prefs = (() => { try { return JSON.parse(localStorage.getItem(PREFS_KEY)) || {}; } catch { return {}; } })();
   const savePrefs = () => localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
   const cache = new Map(); // offerId -> { at, slots: [{start, n}], error }
-  const state = { open: false, debug: false, loading: false, error: null, processes: [], processId: null, rows: [], progress: null, run: 0 };
+  const state = { open: false, debug: false, loading: false, error: null, processes: [], processId: null, rows: [], progress: null, run: 0, contextKey: '', professional: false };
+
+  // A driving instructor books on behalf of a student. The site then works
+  // with a process and a person that only show up in its own API calls
+  // (process/{id}/booking-options?impersonatedPersonId={id}), so remember the
+  // latest one, and the page to go back to within that student's booking flow.
+  let siteProcess = null;
+  let optionsRoute = null;
+  const OPTIONS_ROUTE = /\/booking-options(\/process\/[0-9a-f-]{36})?$/;
+  const impersonating = () => !!token()?.isImpersonating;
+  const person = () => (impersonating() && siteProcess?.personId) || null;
+  const withPerson = (path) => { const p = person(); return p ? path + (path.includes('?') ? '&' : '?') + 'impersonatedPersonId=' + p : path; };
 
   // ---------- data ----------
   const personPicker = () => {
@@ -92,10 +109,16 @@
     try {
       log('open', { path: location.pathname, token: tokenMeta(), personPicker: personPicker() });
       // Only for the debug log: who is logged in and whom they can book for.
-      api('auth/user-info').then((u) => log('user-info', { isBookOnBehalf: u.isBookOnBehalf, isMitIdProfessional: u.isMitIdProfessional, shape: shape(u) })).catch(() => {});
+      api('auth/user-info').then((u) => { log('user-info', { isBookOnBehalf: u.isBookOnBehalf, isMitIdProfessional: u.isMitIdProfessional, shape: shape(u) }); if (u.isMitIdProfessional && !state.professional) { state.professional = true; render(); } }).catch(() => {});
       api('person/associated-persons').then((p) => log('associated-persons', { count: p.associatedPersons?.length, shape: shape(p) })).catch(() => {});
-      state.processes = await api('processes/applicant-processes');
-      log('processes', { count: state.processes.length, names: state.processes.map((p) => p.taskTypeName), shape: shape(state.processes) });
+      const own = await api('processes/applicant-processes');
+      log('processes', { count: own.length, names: own.map((p) => p.taskTypeName), shape: shape(own) });
+      // When booking on behalf of a student, use the student the site has selected.
+      const ctx = impersonating() ? siteProcess : null;
+      log('context', { impersonating: impersonating(), siteProcess: siteProcess && { processId: siteProcess.processId, hasPerson: !!siteProcess.personId }, optionsRoute });
+      state.processes = ctx ? [{ processId: ctx.processId, taskTypeName: 'Valgt elev' }] : own;
+      const key = ctx ? ctx.processId + '|' + ctx.personId : '';
+      if (key !== state.contextKey) { cache.clear(); state.contextKey = key; state.processId = null; }
       if (!state.processes.some((p) => p.processId === state.processId)) state.processId = state.processes[0]?.processId ?? null;
       if (state.processId) await loadOptions();
     } catch (e) { state.error = e.message; logError('loadModel', e); }
@@ -104,7 +127,7 @@
   }
 
   async function loadOptions() {
-    const o = await api(`process/${state.processId}/booking-options`);
+    const o = await api(withPerson(`process/${state.processId}/booking-options`));
     const cats = new Map(o.onlineCategories.map((c) => [c.onlineCategoryId, c]));
     const offers = new Map(o.onlineOffers.map((x) => [x.onlineOfferId, x]));
     state.rows = [];
@@ -141,7 +164,7 @@
       if (run !== state.run || !state.open) { log('scan-aborted', { done: state.progress?.done }); return; }
       try {
         const start = new Date().toISOString(), end = new Date(Date.now() + r.days * 864e5).toISOString();
-        const d = await api(`time-slots/task-groups-by-non-anonymous-person/${r.offerId}?startDateTime=${start}&endDateTime=${end}&durationInMinutes=${r.duration}&findFirstAvailable=false`);
+        const d = await api(withPerson(`time-slots/task-groups-by-non-anonymous-person/${r.offerId}?startDateTime=${start}&endDateTime=${end}&durationInMinutes=${r.duration}&findFirstAvailable=false`));
         const by = new Map();
         for (const s of d.timeSlots) by.set(s.startTime, (by.get(s.startTime) || 0) + 1);
         cache.set(r.offerId, { at: Date.now(), slots: [...by].map(([start, n]) => ({ start, n })) });
@@ -223,11 +246,21 @@
       // page on screen, so leave via "Mine prøver" first and wait until the
       // site has finished that navigation (it redirects to /appointments/list).
       if (location.pathname.includes('/offers/')) {
-        routerGo(location.pathname.split('/offers/')[0] + '/appointments');
+        const base = location.pathname.split('/offers/')[0];
         const t = Date.now();
-        while (!location.pathname.includes('/appointments/') && Date.now() - t < 5000) await pause(50);
-        log('handover-detour', { ms: Date.now() - t, path: location.pathname });
-        await pause(200);
+        if (impersonating()) {
+          // An instructor must not leave the student's booking flow (going to
+          // the student list ends it), so step back to the area page instead
+          // and wait for the site to finish, which shows as a new page title.
+          const title = document.title;
+          routerGo(optionsRoute || base + '/booking-options');
+          while (document.title === title && Date.now() - t < 5000) await pause(50);
+        } else {
+          routerGo(base + '/appointments');
+          while (!location.pathname.includes('/appointments/') && Date.now() - t < 5000) await pause(50);
+        }
+        log('handover-detour', { ms: Date.now() - t, path: location.pathname, title: document.title });
+        await pause(250);
       }
       routerGo(target);
       await pause(300);
@@ -317,13 +350,15 @@
     let body = root.querySelector('.body'); const top = body?.scrollTop || 0;
     const kids = [];
     kids.push(h('header', {},
-      h('div', {}, h('h1', {}, 'Ledige prøvetider'), h('div', { class: 'sub' }, [personName() && `Viser tider for ${personName()}`, 'Klik på et tidspunkt for at booke det i MinKøreprøve'].filter(Boolean).join(' · '))),
+      h('div', {}, h('h1', {}, 'Ledige prøvetider'), h('div', { class: 'sub' }, [person() ? 'Viser tider for den valgte elev' : personName() && `Viser tider for ${personName()}`, 'Klik på et tidspunkt for at booke det i MinKøreprøve'].filter(Boolean).join(' · '))),
       h('button', { class: 'x', 'aria-label': 'Luk', onclick: close }, '×')));
     if (state.debug) kids.push(debugView());
     else if (state.error === 'login') kids.push(h('div', { class: 'body' }, h('div', { class: 'warn' }, 'Du er ikke logget ind, eller sessionen er udløbet. Log ind med MitID og prøv igen.')));
     else if (state.error) kids.push(h('div', { class: 'body' }, h('div', { class: 'warn' }, 'Kunne ikke hente data: ' + state.error)));
     else if (state.loading) kids.push(h('div', { class: 'body' }, h('div', { class: 'empty' }, 'Henter prøvesteder…')));
-    else if (!state.processId) kids.push(h('div', { class: 'body' }, h('div', { class: 'empty' }, 'Der er ingen prøver, der kan bookes for denne person.')));
+    else if (!state.processId) kids.push(h('div', { class: 'body' }, h('div', { class: 'empty' }, state.professional || location.pathname.includes('/assessor-processes')
+      ? 'Vælg først en elev i Elevoverblik, så du står på siden "Vælg område". Åbn derefter dette panel igen.'
+      : 'Der er ingen prøver, der kan bookes for denne person.')));
     else {
       const res = results();
       kids.push(h('div', { class: 'filters' },
@@ -361,12 +396,16 @@
       for (const e of list.getEntries()) {
         if (!/^https:\/\/[^/]*workforce-planner\.dk\//.test(e.name) || /\.(js|css|woff2?|svg|png|ico)(\?|$)/.test(e.name)) continue;
         log('site-call', { path: pathOnly(e.name), by: e.initiatorType, status: e.responseStatus || undefined, ms: Math.round(e.duration) });
+        const m = /\/process\/([0-9a-f-]{36})\/booking-options(?:\?(.*))?$/.exec(e.name);
+        if (m && e.initiatorType !== 'fetch') siteProcess = { processId: m[1], personId: (/(?:^|&)impersonatedPersonId=([0-9a-f-]{36})/.exec(m[2] || '') || [])[1] || null };
       }
     }).observe({ type: 'resource', buffered: true });
   } catch (e) { logError('performance-observer', e); }
   let lastPath = location.pathname, lastToken = tokenMeta().id, lastPicker = JSON.stringify(personPicker());
+  if (OPTIONS_ROUTE.test(location.pathname)) optionsRoute = location.pathname;
   setInterval(() => {
     try {
+      if (OPTIONS_ROUTE.test(location.pathname)) optionsRoute = location.pathname;
       if (location.pathname !== lastPath) { log('route', { from: lastPath, to: location.pathname, title: document.title }); lastPath = location.pathname; }
       const m = tokenMeta();
       if (m.id !== lastToken) { log('token-changed', m); lastToken = m.id; }

@@ -55,14 +55,15 @@ browser console (Ctrl+Shift+J, or Cmd+Shift+J on a Mac).
 
 ### A useful test run for a driving instructor
 
-The on-behalf-of flow has not been seen yet, so a log from this run answers
-most open questions:
-
-1. Log in, and pick a student in the site's "Vælg person" menu.
+1. Log in and pick a student in "Elevoverblik", so the site shows "Vælg
+   område" for that student.
 2. Open the panel and let the search finish.
 3. Click one of the times and check that the site shows that center and date.
-4. Pick another student, open the panel again and let the search finish.
+4. Open the panel again and click a time at another center.
 5. Open "Fejlsøgning" and save the log.
+
+Do not reload the page along the way: the site then logs in again and drops
+the selected student.
 
 ## Development
 
@@ -101,11 +102,13 @@ one only loads through `about:debugging`.
 
 ## Status
 
-Prototype, version 0.2.1, signed for Firefox.
+Prototype, version 0.2.2.
 
 - Works with one citizen login in Chromium (installed extension) and in
   Firefox (0.2.0 as a temporary add-on).
-- Not yet tested in a driving instructor's session, where he books on behalf
-  of students.
-- Self-updating has not been exercised; the first newer version will be the
-  test.
+- 0.2.1 did not work for a driving instructor: it found no exams for the
+  selected student. 0.2.2 adds support for booking on behalf of a student,
+  built from his debug log and checked offline only. It still needs a run in
+  his session.
+- Self-updating from 0.2.1 to 0.2.2 will be the first test of the update
+  mechanism.
